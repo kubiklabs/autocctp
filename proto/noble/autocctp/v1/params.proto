@@ -1,0 +1,13 @@
+syntax = "proto3";
+package noble.autocctp.v1;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/noble-assets/autocctp/v1/x/autocctp/types";
+
+// Params defines the parameters for the module.
+message Params {
+  option (gogoproto.goproto_stringer) = false;
+  // optionally, turn off the module
+  bool autocctp_active = 1;
+}
