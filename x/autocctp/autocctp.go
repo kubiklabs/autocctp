@@ -109,9 +109,10 @@ func (im IBCMiddleware) OnRecvPacket(
 	}
 
 	// _, addressBz, err := bech32.DecodeAndConvert(data.Receiver)
-	var transferReceiver = transferData.Receiver
+	var transferReceiver = transferData.GetReceiver()
 	// TODO: handle ok here or see a better way to get intgere ICS-20 amount, ref github
-	var transferAmount, _ = math.NewIntFromString(transferData.Amount)
+	var transferAmount, _ = math.NewIntFromString(transferData.GetAmount())
+	var transferDenom = transferData.GetDenom()
 
 	// Pass the new packet down the middleware stack first to complete the transfer
 	//  allowing everything to be executed before the CCTP message is sent.
@@ -141,7 +142,7 @@ func (im IBCMiddleware) OnRecvPacket(
 				Amount:            memoAmount,
 				DestinationDomain: memoDestinationDomain,
 				MintRecipient:     []byte(memoMintRecipient),
-				BurnToken:         "",
+				BurnToken:         transferDenom, // TODO: verify that this denom is ibc unwrapped denom
 			}
 			// if err := cctpMsg.ValidateBasic(); err != nil {
 			// 	return err
@@ -166,7 +167,7 @@ func (im IBCMiddleware) OnRecvPacket(
 				Amount:            memoAmount,
 				DestinationDomain: memoDestinationDomain,
 				MintRecipient:     []byte(memoMintRecipient),
-				BurnToken:         "",
+				BurnToken:         transferDenom,
 				DestinationCaller: []byte(memoDestinationCaller),
 			}
 			// if err := cctpMsg.ValidateBasic(); err != nil {
