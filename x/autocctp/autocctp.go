@@ -12,6 +12,8 @@ import (
 	channeltypes "github.com/cosmos/ibc-go/v8/modules/core/04-channel/types"
 	porttypes "github.com/cosmos/ibc-go/v8/modules/core/05-port/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
+
+	"github.com/noble-assets/autocctp/v2/x/autocctp/types"
 )
 
 var _ porttypes.IBCModule = &IBCMiddleware{}
@@ -54,7 +56,16 @@ func (im IBCMiddleware) OnChanOpenTry(
 	counterparty channeltypes.Counterparty,
 	counterpartyVersion string,
 ) (version string, err error) {
-	return im.app.OnChanOpenTry(ctx, order, connectionHops, portID, channelID, chanCap, counterparty, counterpartyVersion)
+	return im.app.OnChanOpenTry(
+		ctx,
+		order,
+		connectionHops,
+		portID,
+		channelID,
+		chanCap,
+		counterparty,
+		counterpartyVersion,
+	)
 }
 
 // OnChanOpenAck implements the IBCModule interface.
@@ -90,73 +101,91 @@ func (im IBCMiddleware) OnRecvPacket(
 	packet channeltypes.Packet,
 	relayer sdk.AccAddress,
 ) ibcexported.Acknowledgement {
-	var data transfertypes.FungibleTokenPacketData
+	var transferData transfertypes.FungibleTokenPacketData
 	var ackErr error
-	if err := cctptypes.ModuleCdc.UnmarshalJSON(packet.GetData(), &data); err != nil {
+	if err := cctptypes.ModuleCdc.UnmarshalJSON(packet.GetData(), &transferData); err != nil {
 		ackErr = errors.Wrapf(sdkerrors.ErrInvalidType, "cannot unmarshal ICS-20 transfer packet data")
 		return channeltypes.NewErrorAcknowledgement(ackErr)
 	}
 
-	// parse the ics-20 receiver address
 	// _, addressBz, err := bech32.DecodeAndConvert(data.Receiver)
-	// _, addressBz, err = bech32.DecodeAndConvert(data.Sender)
-	// if err != nil {
-	// 	return channeltypes.NewErrorAcknowledgement(err)
-	// }
-
-	// _, found := im.cctpKeeper.GetBlacklisted(ctx, addressBz)
-	// if found {
-	// 	ackErr = errors.Wrapf(sdkerrors.ErrUnauthorized, "receiver address is blacklisted")
-	// 	return channeltypes.NewErrorAcknowledgement(ackErr)
-	// }
-
-	// parse the memo field in the ics-20 packet
-
-	// get DestinationDomain, MintRecipient from memo field
+	var transferReceiver = transferData.Receiver
+	// TODO: handle ok here or see a better way to get intgere ICS-20 amount, ref github
+	var transferAmount, _ = math.NewIntFromString(transferData.Amount)
 
 	// Pass the new packet down the middleware stack first to complete the transfer
+	//  allowing everything to be executed before the CCTP message is sent.
 	ack := im.app.OnRecvPacket(ctx, packet, relayer)
 	if !ack.Success() {
 		return ack
 	}
 
-	// cctp transaction message
-	msg := &cctptypes.MsgDepositForBurn{
-		From:              "transferMetadata.Receiver", // TODO: check if noble address
-		Amount:            math.OneInt(),
-		DestinationDomain: 1, // TODO: fix this hardcode, fetch the map of domains and validate the "memo" packet domain value
-		MintRecipient:     []byte("autopilotMetadata.MintRecipient"),
-		BurnToken:         "",
+	var memoData types.CctpMemo
+	// Attempt to parse the memo field as either DepositForBurn or DepositForBurnWithCaller.
+	if err := cctptypes.ModuleCdc.UnmarshalJSON([]byte(transferData.GetMemo()), &memoData); err == nil {
+		depositForBurn := memoData.Circle.Cctp.GetDepositForBurn()
+		depositForBurnWithCaller := memoData.Circle.Cctp.GetDepositForBurnWithCaller()
+		if depositForBurn != nil {
+			var memoDestinationDomain = depositForBurn.DestinationDomain
+			var memoMintRecipient = depositForBurn.MintRecipient
+			var memoAmount = depositForBurn.Amount
+
+			// Check that the amount in the memo is <= the amount in the ICS20 transfer.
+			if memoAmount.GT(transferAmount) {
+				// TODO: return err ack here
+			}
+
+			// - Construct a CCTP transaction based on the memo field, and run ValidateBasic.
+			cctpMsg := &cctptypes.MsgDepositForBurn{
+				From:              transferReceiver,
+				Amount:            memoAmount,
+				DestinationDomain: memoDestinationDomain,
+				MintRecipient:     []byte(memoMintRecipient),
+				BurnToken:         "",
+			}
+			// if err := cctpMsg.ValidateBasic(); err != nil {
+			// 	return err
+			// }
+
+			// - Execute that CCTP transaction and return the result.
+			msgServer := cctpkeeper.NewMsgServerImpl(im.cctpKeeper)
+			_, err := msgServer.DepositForBurn(ctx, cctpMsg)
+			if err != nil {
+				return channeltypes.NewErrorAcknowledgement(err)
+				// TODO: implement error type and uncomment
+				// return errors.Wrapf(err, "failed to cctp")
+			}
+		} else if depositForBurnWithCaller != nil {
+			var memoDestinationDomain = depositForBurnWithCaller.DestinationDomain
+			var memoMintRecipient = depositForBurnWithCaller.MintRecipient
+			var memoAmount = depositForBurnWithCaller.Amount
+			var memoDestinationCaller = depositForBurnWithCaller.DestinationCaller
+
+			cctpMsg := &cctptypes.MsgDepositForBurnWithCaller{
+				From:              transferReceiver,
+				Amount:            memoAmount,
+				DestinationDomain: memoDestinationDomain,
+				MintRecipient:     []byte(memoMintRecipient),
+				BurnToken:         "",
+				DestinationCaller: []byte(memoDestinationCaller),
+			}
+			// if err := cctpMsg.ValidateBasic(); err != nil {
+			// 	return err
+			// }
+
+			// - Execute that CCTP transaction and return the result.
+			msgServer := cctpkeeper.NewMsgServerImpl(im.cctpKeeper)
+			_, err := msgServer.DepositForBurnWithCaller(ctx, cctpMsg)
+			if err != nil {
+				return channeltypes.NewErrorAcknowledgement(err)
+				// TODO: implement error type and uncomment
+				// return errors.Wrapf(err, "failed to cctp")
+			}
+		} else {
+			// Unable to parse, return the acknowledge received by the underlying middlwares.
+			return ack
+		}
 	}
-
-	// TODO: implement msg validatoion and uncomment
-	// if err := msg.ValidateBasic(); err != nil {
-	// 	return err
-	// }
-
-	msgServer := cctpkeeper.NewMsgServerImpl(im.cctpKeeper)
-	_, err := msgServer.DepositForBurn(
-		sdk.WrapSDKContext(ctx),
-		msg,
-	)
-	if err != nil {
-		return channeltypes.NewErrorAcknowledgement(err)
-		// TODO: implement error type and uncomment
-		// return errors.Wrapf(err, "failed to cctp")
-	}
-
-	// _, addressBz, err := bech32.DecodeAndConvert(data.Receiver)
-	// _, addressBz, err = bech32.DecodeAndConvert(data.Sender)
-	// if err != nil {
-	// 	return channeltypes.NewErrorAcknowledgement(err)
-	// }
-
-	// _, found := im.cctpKeeper.GetBlacklisted(ctx, addressBz)
-	// if found {
-	// 	ackErr = errors.Wrapf(sdkerrors.ErrUnauthorized, "receiver address is blacklisted")
-	// 	return channeltypes.NewErrorAcknowledgement(ackErr)
-	// }
-
 	return ack
 }
 
@@ -171,6 +200,10 @@ func (im IBCMiddleware) OnAcknowledgementPacket(
 }
 
 // OnTimeoutPacket implements the IBCModule interface.
-func (im IBCMiddleware) OnTimeoutPacket(ctx sdk.Context, packet channeltypes.Packet, relayer sdk.AccAddress) error {
+func (im IBCMiddleware) OnTimeoutPacket(
+	ctx sdk.Context,
+	packet channeltypes.Packet,
+	relayer sdk.AccAddress,
+) error {
 	return im.app.OnTimeoutPacket(ctx, packet, relayer)
 }
