@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package noble.autocctp.v1;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/noble-assets/autocctp/x/autocctp/types";
+
+message DepositForBurnData {
+  uint32 destination_domain = 1;
+  string mint_recipient = 2;
+  string amount = 3 [
+    (gogoproto.customtype) = "cosmossdk.io/math.Int",
+    (gogoproto.nullable) = false
+  ];
+}
+
+message DepositForBurnWithCaller {
+  uint32 destination_domain = 1;
+  string mint_recipient = 2;
+  string amount = 3 [
+    (gogoproto.customtype) = "cosmossdk.io/math.Int",
+    (gogoproto.nullable) = false
+  ];
+  bytes destination_caller = 4;
+}
+
+message CctpData {
+  oneof message_type {
+    DepositForBurnData deposit_for_burn = 1;
+    DepositForBurnWithCaller deposit_for_burn_with_caller = 2;
+  }
+}
+
+message CctpMemo {
+  message CctpDataWrapper {
+    CctpData cctp = 1;
+  }
+
+  CctpDataWrapper circle = 1;
+}
