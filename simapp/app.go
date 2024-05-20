@@ -33,7 +33,7 @@ import (
 	capabilitykeeper "github.com/cosmos/ibc-go/modules/capability/keeper"
 	transferkeeper "github.com/cosmos/ibc-go/v8/modules/apps/transfer/keeper"
 	ibckeeper "github.com/cosmos/ibc-go/v8/modules/core/keeper"
-	autocctpkeeper "github.com/noble-assets/autocctp/v1/x/autocctp/keeper"
+	autocctpkeeper "github.com/noble-assets/autocctp/v2/x/autocctp/keeper"
 
 	_ "cosmossdk.io/api/cosmos/tx/config/v1"           // import for side-effects
 	_ "cosmossdk.io/x/upgrade"                         // import for side-effects
@@ -44,7 +44,7 @@ import (
 	_ "github.com/cosmos/cosmos-sdk/x/distribution"    // import for side-effects
 	_ "github.com/cosmos/cosmos-sdk/x/params"          // import for side-effects
 	_ "github.com/cosmos/cosmos-sdk/x/staking"         // import for side-effects
-	_ "github.com/noble-assets/autocctp/v1/x/autocctp" // import for side-effects
+	_ "github.com/noble-assets/autocctp/v2/x/autocctp" // import for side-effects
 )
 
 var DefaultNodeHome string

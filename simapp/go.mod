@@ -204,5 +204,7 @@ replace (
 	github.com/circlefin/noble-cctp => github.com/noble-assets/cctp v0.0.0-20240416144200-ca0731aa76b1
 	// use eden compatible circlefin/noble-fiattokenfactory
 	github.com/circlefin/noble-fiattokenfactory => github.com/noble-assets/fiattokenfactory v0.0.0-20240416143000-a76c29f9a0cd
-	github.com/noble-assets/autocctp/v2 => ../
+	github.com/noble-assets/autocctp/v2 => ./..
+
+	github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
 )
